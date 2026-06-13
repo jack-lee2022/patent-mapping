@@ -206,6 +206,13 @@ results = build_all_charts("patents_enriched.csv", "./output")
 | **引證網路** | 識別無法繞過的基石專利，決定授權策略或下游卡位點 |
 | **IPC Treemap** | 呈現各子類別占比，評估地毯式的覆蓋成本與優先順序 |
 
+**識別關鍵專利後觸發深度精讀（路徑 B / C）：**
+
+引證網路或競爭者雷達識別出的高重要性專利，應交由以下技能進一步處理：
+
+1. [patent-downloader](https://github.com/jack-lee2022/patent-downloader) — 下載 PDF 全文與附圖
+2. [patent-structured-analysis](https://github.com/jack-lee2022/patent-structured-analysis) — 拆解權利要求、FTO 評估、迴避設計
+
 ---
 
 ## 觸發詞 (Triggers)
