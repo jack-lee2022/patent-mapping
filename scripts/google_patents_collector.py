@@ -16,6 +16,7 @@ Usage:
 
 import argparse
 import json
+import random
 import time
 import urllib.parse
 from pathlib import Path
@@ -30,6 +31,8 @@ from bs4 import BeautifulSoup
 
 TOR_ENABLED = True
 TOR_PROXY = "socks5://127.0.0.1:9050"
+TOR_CONTROL_PORT = 9051
+TOR_CONTROL_PASSWORD = ""   # leave empty for cookie-auth; set if using HashedControlPassword
 REQUEST_DELAY = 1.0
 GOOGLE_PATENTS_URL = "https://patents.google.com/patent"
 
@@ -42,6 +45,35 @@ try:
 except ImportError:
     HAS_RANDOM_DELAY = False
 
+try:
+    from stem import Signal
+    from stem.control import Controller as _TorController
+    HAS_STEM = True
+except ImportError:
+    HAS_STEM = False
+
+
+def _request_new_tor_exit() -> bool:
+    """Send NEWNYM to Tor control port to obtain a new exit node. Returns True on success."""
+    if not HAS_STEM:
+        print("[TOR] stem not installed — run: pip install stem")
+        return False
+    try:
+        with _TorController.from_port(port=TOR_CONTROL_PORT) as ctrl:
+            # Let stem auto-detect auth method (cookie preferred, then password, then none)
+            if TOR_CONTROL_PASSWORD:
+                ctrl.authenticate(password=TOR_CONTROL_PASSWORD)
+            else:
+                ctrl.authenticate()
+            ctrl.signal(Signal.NEWNYM)
+            time.sleep(5)   # allow Tor to build a new circuit
+            print("[TOR] New exit node obtained (NEWNYM sent)")
+            return True
+    except Exception as e:
+        print(f"[TOR] Exit rotation failed: {e}")
+        print(f"      Make sure torrc has: ControlPort {TOR_CONTROL_PORT} + CookieAuthentication 1")
+        return False
+
 # ---------------------------------------------------------------------------
 # Collector
 # ---------------------------------------------------------------------------
@@ -52,6 +84,7 @@ class GooglePatentsCollector:
     API_BASE = "https://patents.google.com/xhr/query"
 
     def __init__(self, tor_enabled: bool = TOR_ENABLED):
+        self.tor_enabled = tor_enabled
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": (
@@ -70,9 +103,9 @@ class GooglePatentsCollector:
     def _sleep(self):
         """Execute delay between requests."""
         if HAS_RANDOM_DELAY:
-            human_like_sleep(mu=8.0, sigma=3.0)  # Conservative human speed
+            human_like_sleep(mu=8.0, sigma=3.0)
         else:
-            self._sleep()
+            time.sleep(REQUEST_DELAY)
 
     # -- URL builders -------------------------------------------------------
 
@@ -111,25 +144,44 @@ class GooglePatentsCollector:
 
     # -- Core fetch methods -------------------------------------------------
 
-    def _fetch_page(self, url: str) -> Optional[Dict]:
-        try:
-            resp = self.session.get(url, timeout=60)
-            resp.raise_for_status()
-            return resp.json()
-        except (requests.RequestException, json.JSONDecodeError) as e:
-            print(f"[ERROR] Request failed (trying Browser fallback): {e}")
+    def _fetch_page(self, url: str, max_retries: int = 4) -> Optional[Dict]:
+        """Fetch with exponential backoff; rotates Tor exit node after 2 consecutive 503s."""
+        consecutive_503 = 0
+        rotations_done = 0
+        MAX_ROTATIONS = 2
+
+        for attempt in range(max_retries):
             try:
-                from advanced.browser_renderer import render_page
-                html_content = render_page(url)
-                if html_content:
-                    # 嘗試從渲染出的 HTML 中解析 JSON (如果 API 返回的是內嵌 JSON)
-                    # 或是返回解析後的結構
-                    soup = BeautifulSoup(html_content, "lxml")
-                    # Placeholder: 當前僅能解析 HTML 結構或返回 raw html
-                    return {"results": {"cluster": []}, "html": html_content}
-            except Exception as e2:
-                print(f"[CRITICAL ERROR] Fallback failed: {e2}")
-            return None
+                resp = self.session.get(url, timeout=60)
+                resp.raise_for_status()
+                return resp.json()
+            except requests.exceptions.HTTPError as e:
+                status = e.response.status_code if e.response is not None else 0
+                if status == 503:
+                    consecutive_503 += 1
+                    wait = (2 ** attempt) + random.uniform(0.5, 1.5)
+                    print(f"[BACKOFF] 503 rate-limit, retry {attempt + 1}/{max_retries} in {wait:.1f}s...")
+                    time.sleep(wait)
+                    # After 2 consecutive 503s, request a new Tor exit node
+                    if consecutive_503 >= 2 and self.tor_enabled and rotations_done < MAX_ROTATIONS:
+                        if _request_new_tor_exit():
+                            consecutive_503 = 0
+                            rotations_done += 1
+                    continue
+                print(f"[ERROR] HTTP {status}: {e}")
+                break
+            except (requests.RequestException, json.JSONDecodeError) as e:
+                print(f"[ERROR] Request failed (trying Browser fallback): {e}")
+                break
+
+        try:
+            from advanced.browser_renderer import render_page
+            html_content = render_page(url)
+            if html_content:
+                return {"results": {"cluster": []}, "html": html_content}
+        except Exception as e2:
+            print(f"[CRITICAL ERROR] Fallback failed: {e2}")
+        return None
 
     def _extract_results(self, data: Optional[Dict]) -> List[Dict]:
         if not data:
@@ -377,6 +429,34 @@ class GooglePatentsDetailEnricher:
 
         soup = BeautifulSoup(resp.text, "lxml")
         result = {}
+
+        # Abstract
+        abstract = None
+        for sel in ["section[itemprop='abstract']", "div.abstract", "abstract"]:
+            elem = soup.select_one(sel)
+            if elem:
+                text = elem.get_text(separator=" ", strip=True)
+                if len(text) > 30:
+                    abstract = text
+                    break
+        if not abstract:
+            meta_abs = soup.find("meta", attrs={"name": "description"})
+            if meta_abs and meta_abs.get("content") and len(meta_abs["content"]) > 30:
+                abstract = meta_abs["content"]
+        result["abstract"] = abstract
+
+        # IPC / CPC classification codes
+        ipc_codes = []
+        for span in soup.select("span[itemprop='Code']"):
+            code = span.get_text(strip=True).replace(" ", "")
+            if code and len(code) >= 4 and code not in ipc_codes:
+                ipc_codes.append(code)
+        if not ipc_codes:
+            for span in soup.select("span.classification-code"):
+                code = span.get_text(strip=True).replace(" ", "")
+                if code and len(code) >= 4 and code not in ipc_codes:
+                    ipc_codes.append(code)
+        result["ipc_codes"] = ipc_codes  # list of strings, e.g. ["A24F40/10", "H05B3/40"]
 
         # Claims
         claims = None
