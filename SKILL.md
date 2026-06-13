@@ -150,42 +150,45 @@ python scripts/advanced/abstract_enricher.py \
 
 ## Tor 自動換 IP
 
-`google_patents_collector.py` 連續遭遇 2 次 503 後，自動向 Tor Control Port 發送 NEWNYM 信號切換出口節點（每次請求最多輪換 2 次），無需人工介入。
+`--enrich` 補抓摘要時，`abstract_enricher.py` 會透過 Tor 代理請求 Google Patents 詳細頁，遭遇連續 2 次 503 後自動發送 NEWNYM 切換出口節點。
 
-**前置需求（`torrc`）**：
-
-```
-SocksPort 9050
-ControlPort 9051
-CookieAuthentication 1
-```
-
-**相依套件**：
-
-```bash
-pip install stem requests beautifulsoup4 lxml pandas seaborn matplotlib langdetect
-```
+Tor 安裝、`torrc` 設定與 `proxy_manager.py` 啟動指引請參照 [pro-patent-search](https://github.com/jack-lee2022/pro-patent-search)（兩個技能共用同一個 Tor 實例）。
 
 ---
 
 ## 快速開始
 
+**典型流程：接收 pro-patent-search 的輸出 CSV 直接製圖**
+
 ```python
-from scripts.google_patents_collector import GooglePatentsCollector
+from scripts.advanced.visualizer import build_all_charts
+
+# CSV 由 pro-patent-search 的 patent_search_runner.py 產出
+results = build_all_charts(
+    "nebulizer_Patent_List.csv",
+    "./output"
+)
+print(f"分類率: {results['classify_rate']}")
+print(f"Blue Ocean: {len(results['blue_ocean'])} 格")
+```
+
+**CLI：**
+```powershell
+# 摘要已補全（pro-patent-search 預設補抓）→ 直接製圖
+python scripts/advanced/visualizer.py --csv patents.csv --outdir ./output
+
+# 摘要缺失時加 --enrich，自動補抓後再製圖
+python scripts/advanced/visualizer.py --csv patents_raw.csv --outdir ./output --enrich
+```
+
+**獨立使用（非 pro-patent-search 來源的 CSV）：**
+```python
 from scripts.advanced.abstract_enricher import enrich_csv
 from scripts.advanced.visualizer import build_all_charts
 
-# 1. 收集
-col = GooglePatentsCollector(tor_enabled=True)
-items = col.fetch_by_ipc("A61M11/00", max_results=200)
-
-# 2. 補抓摘要（max_enrich=0 = 補全所有缺摘要，無上限）
+# 補抓摘要（max_enrich=0 = 無上限）
 enrich_csv("patents_raw.csv", "patents_enriched.csv", max_enrich=0)
-
-# 3. 分類 + 生成圖表
 results = build_all_charts("patents_enriched.csv", "./output")
-print(f"分類率: {results['classify_rate']}")
-print(f"Blue Ocean: {len(results['blue_ocean'])} 格")
 ```
 
 ---
