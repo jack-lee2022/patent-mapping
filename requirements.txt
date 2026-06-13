@@ -24,3 +24,7 @@ langdetect>=1.0.9        # detect abstract language; non-English → title-only 
 
 # ── Utilities ───────────────────────────────────────────────────────────────
 tqdm>=4.66.0             # progress bars
+
+# ── Optional visualization extras ──────────────────────────────────────────
+squarify>=0.4.3          # IPC treemap chart (optional)
+networkx>=3.0            # Citation network graph (optional)
