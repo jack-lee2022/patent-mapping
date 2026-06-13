@@ -144,3 +144,9 @@ The `--enrich` flag triggers `abstract_enricher.py` to fill missing abstracts an
 ## Skill SOP
 
 See `SKILL.md` for the full four-phase analysis SOP (data cleaning → macro trends → tech-effect matrix → citation network).
+
+---
+
+## Five-Skill Workflow Guide
+
+For the complete five-skill orchestration guide (Paths A / B / C), see **[WORKFLOW.md](https://github.com/jack-lee2022/patent-shared/blob/master/WORKFLOW.md)** in patent-shared.
