@@ -1,0 +1,26 @@
+# patent-mapping — Python dependencies
+# Install: pip install -r requirements.txt
+
+# ── HTTP / Web ──────────────────────────────────────────────────────────────
+requests>=2.31.0
+requests[socks]          # SOCKS5 proxy support (needed for Tor)
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# ── Browser Automation (anti-bot bypass) ────────────────────────────────────
+playwright>=1.40.0       # run: playwright install chromium  (after pip install)
+
+# ── Tor Proxy Control ───────────────────────────────────────────────────────
+stem>=1.8.2              # Python Tor controller (NEWNYM circuit rotation)
+PySocks>=1.7.1           # SOCKS proxy socket support
+
+# ── Data / Visualization ────────────────────────────────────────────────────
+pandas>=2.0.0
+seaborn>=0.13.0
+matplotlib>=3.8.0
+
+# ── Language Detection (non-English abstract handling) ──────────────────────
+langdetect>=1.0.9        # detect abstract language; non-English → title-only classification
+
+# ── Utilities ───────────────────────────────────────────────────────────────
+tqdm>=4.66.0             # progress bars
