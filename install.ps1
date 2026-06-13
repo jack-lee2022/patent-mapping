@@ -11,6 +11,17 @@ Write-Host "  patent-mapping  Installation Script"                 -ForegroundCo
 Write-Host "======================================================" -ForegroundColor Cyan
 Write-Host ""
 
+# ─── 0. Git submodule init ────────────────────────────────────────────────
+Write-Host "[0/4] Initializing git submodules (scripts/ → patent-shared)..." -ForegroundColor Yellow
+git -C $ScriptDir submodule update --init --recursive
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[ERROR] git submodule update failed. Make sure you cloned with --recurse-submodules." -ForegroundColor Red
+    Write-Host "  Run: git submodule update --init --recursive" -ForegroundColor DarkYellow
+} else {
+    Write-Host "  OK — scripts/ submodule ready." -ForegroundColor Green
+}
+Write-Host ""
+
 # ─── 1. Python packages ────────────────────────────────────────────────────
 Write-Host "[1/4] Installing Python packages..." -ForegroundColor Yellow
 pip install -r "$ScriptDir\requirements.txt"
@@ -160,8 +171,8 @@ Write-Host "======================================================" -ForegroundC
 Write-Host "  Installation complete!"                               -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Quick start:"
-Write-Host "  - Collect:  python scripts/google_patents_collector.py --ipc A61M11/00 --max 200"
-Write-Host "  - Enrich:   python scripts/advanced/abstract_enricher.py --csv raw.csv --out enriched.csv"
-Write-Host "  - Visualize: python scripts/advanced/visualizer.py --csv enriched.csv --outdir ./output --enrich"
+Write-Host "  - Collect:   python scripts/google_patents_collector.py --ipc A61M11/00 --max 200"
+Write-Host "  - Enrich:    python scripts/advanced/abstract_enricher.py --csv raw.csv --out enriched.csv"
+Write-Host "  - Visualize: python scripts/advanced/visualizer.py --csv enriched.csv --outdir ./output"
 Write-Host "======================================================" -ForegroundColor Cyan
 Write-Host ""
